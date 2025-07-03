@@ -1,0 +1,266 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(USER)
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Property {
+  id          String       @id @default(cuid())
+  name        String
+  address     String
+  units       Unit[]
+  inspections Inspection[]
+  expenses    Expense[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([name])
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  name       String
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  leases     Lease[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([propertyId])
+}
+
+model Tenant {
+  id             String           @id @default(cuid())
+  name           String
+  email          String           @unique
+  phone          String?
+  leases         Lease[]
+  guarantors     Guarantor[]
+  contactHistory ContactHistory[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([email])
+  @@index([name])
+}
+
+model Lease {
+  id         String     @id @default(cuid())
+  unitId     String
+  unit       Unit       @relation(fields: [unitId], references: [id])
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  startDate  DateTime
+  endDate    DateTime
+  rentAmount Float
+  payments   Payment[]
+  documents  Document[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([startDate, endDate])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  leaseId        String
+  lease          Lease         @relation(fields: [leaseId], references: [id])
+  amount         Float
+  paymentDate    DateTime
+  status         PaymentStatus @default(NOT_PAID)
+  collectorNotes String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([leaseId])
+  @@index([paymentDate])
+  @@index([status])
+}
+
+enum PaymentStatus {
+  PAID
+  NOT_PAID
+  PARTIALLY_PAID
+}
+
+model UtilityProvider {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  readings  UtilityReading[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model UtilityReading {
+  id          String          @id @default(cuid())
+  providerId  String
+  provider    UtilityProvider @relation(fields: [providerId], references: [id])
+  reading     Float
+  readingDate DateTime
+  photoUrl    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([providerId])
+}
+
+model Inspection {
+  id             String             @id @default(cuid())
+  propertyId     String
+  property       Property           @relation(fields: [propertyId], references: [id])
+  inspectionDate DateTime
+  checklistId    String
+  checklist      InspectionChecklist @relation(fields: [checklistId], references: [id])
+  results        Json // Store results for each checklist item as JSON
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([propertyId])
+  @@index([checklistId])
+}
+
+model InspectionChecklist {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  items     Json      // Store checklist items as a JSON array of strings
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  inspections Inspection[]
+
+  @@index([name])
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id])
+  category    String
+  description String?
+  amount      Float
+  date        DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([propertyId])
+  @@index([date])
+}
+
+model Document {
+  id        String    @id @default(cuid())
+  leaseId   String
+  lease     Lease     @relation(fields: [leaseId], references: [id])
+  name      String
+  url       String
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([leaseId])
+  @@index([expiresAt])
+}
+
+model Guarantor {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  email     String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model ContactHistory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  date      DateTime
+  notes     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  action    AuditAction
+  userId    String
+  details   Json
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  ACCESS_REPORT
+}
